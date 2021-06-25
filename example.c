@@ -15,6 +15,8 @@
 #include <pthread.h>
 #include <stdint.h>
 #include "thpool.h"
+#include <stdlib.h>
+#include <unistd.h>
 
 void task(void *arg){
 	printf("Thread #%u working on %d\n", (int)pthread_self(), (int) arg);
@@ -31,9 +33,11 @@ int main(){
 	for (i=0; i<40; i++){
 		thpool_add_work(thpool, task, (void*)(uintptr_t)i);
 	};
-
+	thpool_pause(thpool);
+	sleep(100);
 	thpool_wait(thpool);
 	puts("Killing threadpool");
+	
 	thpool_destroy(thpool);
 	
 	return 0;

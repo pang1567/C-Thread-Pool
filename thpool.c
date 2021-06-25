@@ -35,7 +35,7 @@
 #endif
 
 static volatile int threads_keepalive;
-static volatile int threads_on_hold;
+static volatile int threads_on_hold;   // 是否暂停所有线程
 
 
 
@@ -43,6 +43,7 @@ static volatile int threads_on_hold;
 
 
 /* Binary semaphore */
+// 这里的v没有使用当前队列的job的个数来判断，相当于是和队列解耦，只起到唤醒线程的作用，至于线程唤醒后，有没有job可以执行，有job队列来判断，这里只要保证一次唤醒一个队列就可以。
 typedef struct bsem {
 	pthread_mutex_t mutex;
 	pthread_cond_t   cond;
@@ -192,7 +193,7 @@ int thpool_add_work(thpool_* thpool_p, void (*function_p)(void*), void* arg_p){
 	return 0;
 }
 
-
+// 等待所有线程执行结束，也是通过条件变量加互斥锁来同步
 /* Wait until all jobs have finished */
 void thpool_wait(thpool_* thpool_p){
 	pthread_mutex_lock(&thpool_p->thcount_lock);
@@ -210,7 +211,7 @@ void thpool_destroy(thpool_* thpool_p){
 
 	volatile int threads_total = thpool_p->num_threads_alive;
 
-	/* End each thread 's infinite loop */
+	/* End each thread 's infinite loop 结束所有的线程 */
 	threads_keepalive = 0;
 
 	/* Give one second to kill idle threads */
@@ -219,7 +220,7 @@ void thpool_destroy(thpool_* thpool_p){
 	double tpassed = 0.0;
 	time (&start);
 	while (tpassed < TIMEOUT && thpool_p->num_threads_alive){
-		bsem_post_all(thpool_p->jobqueue.has_jobs);
+		bsem_post_all(thpool_p->jobqueue.has_jobs); // 唤醒所有线程后，退出while循环
 		time (&end);
 		tpassed = difftime(end,start);
 	}
@@ -375,6 +376,7 @@ static void* thread_do(struct thread* thread_p){
 			pthread_mutex_unlock(&thpool_p->thcount_lock);
 
 		}
+		printf("num_threads_working %d num_threads_alive %d \n", thpool_p->num_threads_working, thpool_p->num_threads_alive);
 	}
 	pthread_mutex_lock(&thpool_p->thcount_lock);
 	thpool_p->num_threads_alive --;
@@ -508,6 +510,7 @@ static void bsem_init(bsem *bsem_p, int value) {
 	}
 	pthread_mutex_init(&(bsem_p->mutex), NULL);
 	pthread_cond_init(&(bsem_p->cond), NULL);
+	// pthread_cond_t   cond=PTHREAD_COND_INITIALIZER; another init way   
 	bsem_p->v = value;
 }
 
@@ -538,9 +541,11 @@ static void bsem_post_all(bsem *bsem_p) {
 
 /* Wait on semaphore until semaphore has value 0 */
 static void bsem_wait(bsem* bsem_p) {
-	pthread_mutex_lock(&bsem_p->mutex);
+	pthread_mutex_lock(&bsem_p->mutex);           // lock 
+	// while 循环的意思是防止pthread_cond_broadcast多个线程，但是只有一个线程能够运行，其它线程依然等待。
 	while (bsem_p->v != 1) {
-		pthread_cond_wait(&bsem_p->cond, &bsem_p->mutex);
+		pthread_cond_wait(&bsem_p->cond, &bsem_p->mutex); // unlock
+		// lock
 	}
 	bsem_p->v = 0;
 	pthread_mutex_unlock(&bsem_p->mutex);
