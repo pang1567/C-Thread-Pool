@@ -33,8 +33,6 @@ int main(){
 	for (i=0; i<40; i++){
 		thpool_add_work(thpool, task, (void*)(uintptr_t)i);
 	};
-	thpool_pause(thpool);
-	sleep(100);
 	thpool_wait(thpool);
 	puts("Killing threadpool");
 	
